@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h2>Bienvenidos a live chat</h2>
+    <h4>Elige alguna de nuestras Salas de Chat</h4>
+    
+    {% for room in rooms %}
+        <a class="btn btn-success" href="#">{{ room.name }}></a>
+    {% endfor %}
+{% endblock %}
