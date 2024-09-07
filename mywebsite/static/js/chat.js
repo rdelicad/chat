@@ -1,77 +1,43 @@
-$(function() {
-    console.log(user, room_id)
-    var url = 'ws://' + window.location.host + '/ws/room/' + room_id + '/'
-    console.log(url)
-    var chatSocket = new WebSocket(url)
-    console.log(chatSocket)
+document.addEventListener("DOMContentLoaded", function () {
+  var user = "{{ request.user }}";
+  var room_id = "{{ room.id }}";
 
-    chatSocket.onopen = function(e) {
-        console.log('Websocket open')
+  var userList = document.getElementById("userList");
+
+  function addUser(username) {
+    var li = document.createElement("li");
+    li.className = "list-group-item";
+    if (username === user) {
+      li.classList.add("list-group-item-success");
     }
-    chatSocket.onclose = function(e) {
-        console.log('Websocket close')
+    li.textContent = username;
+    userList.appendChild(li);
+  }
+
+  function removeUser(username) {
+    var items = userList.getElementsByTagName("li");
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].textContent === username) {
+        userList.removeChild(items[i]);
+        break;
+      }
     }
-    chatSocket.onmessage = function(data) {
-        const datamsj = JSON.parse(data.data)
-        var msj = datamsj.message
-        var username = datamsj.username
-        var datatime = datamsj.datatime
-        document.querySelector('#boxMessages').innerHTML +=
-        `
-        <div class="alert alert-info" role="alert">
-            ${msj}
-            <div>
-                <small class="fst-italic fw-bold">${username}</small>
-                <small class="float-end">${datatime}</small>
-            </div>
-        </div>
-        ` 
+  }
+
+  var chatSocket = new WebSocket(
+    "ws://" + window.location.host + "/ws/room/" + room_id + "/",
+  );
+
+  chatSocket.onmessage = function (e) {
+    var data = JSON.parse(e.data);
+    if (data.type === "user_join") {
+      addUser(data.username);
+    } else if (data.type === "user_leave") {
+      removeUser(data.username);
     }
+  };
 
-
-    document.querySelector('#btnMessage').addEventListener('click', sendMessage)
-    document.querySelector('#inputMessage').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            sendMessage()
-        }
-    })
-
-    function sendMessage() {
-        var message = document.querySelector('#inputMessage')
-        
-        if (message.value.trim() !== '') {
-            loadMessageHtml(message.value.trim())
-            chatSocket.send(JSON.stringify({
-                'message': message.value.trim(),
-                'username': user,
-                'room_id': room_id
-            }))
-            console.log(message.value.trim())
-            message.value = ''
-        } else {
-            console.log('Envio un mensaje vacio')
-        }
-    }
-
-    function loadMessageHtml(m) {
-        const dateObject = new Date()
-        const hour = dateObject.getHours()
-        const minutes = dateObject.getMinutes()
-        const formattedTime = `${hour}:${minutes}`
-        document.querySelector('#boxMessages').innerHTML +=
-        `
-        <div class="alert alert-warning" role="alert">
-            ${m}
-            <div>
-                <small class="fst-italic fw-bold">${user}</small>
-                <small class="float-end">${formattedTime}</small>
-            </div>
-        </div>
-        ` 
-        }
-})
-
-
-
-
-
+  chatSocket.onclose = function (e) {
+    console.error("Chat socket closed unexpectedly");
+  };
+});

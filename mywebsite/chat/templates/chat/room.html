@@ -1,11 +1,9 @@
 {% extends "base.html" %}
 {% load static %}
 
-
 {% block title %}Chat - {{ room.name }}{% endblock %}
 
 {% block content %}
-
 <div class="container">
     <div class="row">
         <div class="col-8">
@@ -19,18 +17,13 @@
                 <a class="btn btn-primary mt-2 float-end" href="{% url 'home' %}">Salir</a>
             </div>
         </div>
-    
+
         <div class="col-4">
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Usuarios en la sala</h5>
-                    <ul class="list-group">
-                        <li class="list-group-item">Usuario</li>    
-                        <li class="list-group-item">Usuario</li>    
-                        <li class="list-group-item list-group-item-success">Usuario</li>    
-                        <li class="list-group-item">Usuario</li>    
-                        <li class="list-group-item">Usuario</li>    
-                        <li class="list-group-item">Usuario</li>    
+                    <ul class="list-group" id="userList">
+                        <!-- Initially empty, will be populated by JavaScript -->
                     </ul>
                 </div>
             </div>
@@ -39,8 +32,62 @@
 </div>
 
 <script>
-    var user = "{{ request.user }}";
+    var user = "{{ request.user.username }}";
     var room_id = "{{ room.id }}";
+
+    var userList = document.getElementById('userList');
+
+    function addUser(username) {
+        // Check if user is already in the list
+        var items = userList.getElementsByTagName('li');
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].textContent === username) {
+                return; // User already in the list, do nothing
+            }
+        }
+
+        var li = document.createElement('li');
+        li.className = 'list-group-item';
+        if (username === user) {
+            li.classList.add('list-group-item-success');
+        }
+        li.textContent = username;
+        userList.appendChild(li);
+    }
+
+    function removeUser(username) {
+        var items = userList.getElementsByTagName('li');
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].textContent === username) {
+                userList.removeChild(items[i]);
+                break;
+            }
+        }
+    }
+
+    var chatSocket = new WebSocket(
+        'ws://' + window.location.host + '/ws/room/' + room_id + '/'
+    );
+
+    chatSocket.onmessage = function(e) {
+        var data = JSON.parse(e.data);
+        if (data.type === 'user_join') {
+            addUser(data.username);
+        } else if (data.type === 'user_leave') {
+            removeUser(data.username);
+        } else if (data.type === 'connected_users') {
+            // Clear the current list
+            userList.innerHTML = '';
+            // Add all connected users
+            data.users.forEach(function(username) {
+                addUser(username);
+            });
+        }
+    };
+
+    chatSocket.onclose = function(e) {
+        console.error('Chat socket closed unexpectedly');
+    };
 </script>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>

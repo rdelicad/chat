@@ -2,27 +2,61 @@ import json
 from channels.generic.websocket import WebsocketConsumer
 from asgiref.sync import async_to_sync
 from django.utils import timezone
+from .models import Room
 
 class ChatConsumer(WebsocketConsumer):
+    connected_users = set()
+
     def connect(self):
         self.id = self.scope['url_route']['kwargs']['room_id']
-        self.room_group_name = 'sala_chat_%s' % self.id
+        self.room_group_name = f'sala_chat_{self.id}'
         self.user = self.scope['user']
         print("Conexion establecida al grupo: ", self.room_group_name)
         print("Conexion establecida con el channel_name: ", self.channel_name)
+
+        # Add user to connected users set
+        self.connected_users.add(self.user.username)
+
         async_to_sync(self.channel_layer.group_add)(
             self.room_group_name,
             self.channel_name
         )
         self.accept()
 
+        # Notify group about the new user
+        async_to_sync(self.channel_layer.group_send)(
+            self.room_group_name,
+            {
+                'type': 'user_join',
+                'username': self.user.username,
+            }
+        )
+
+        # Send the list of currently connected users to the new user
+        self.send(text_data=json.dumps({
+            'type': 'connected_users',
+            'users': list(self.connected_users),
+        }))
+
     def disconnect(self, close_code):
         print("disconnected")
+
+        # Remove user from connected users set
+        self.connected_users.discard(self.user.username)
+
         async_to_sync(self.channel_layer.group_discard)(
             self.room_group_name,
             self.channel_name
         )
-        pass
+
+        # Notify group about the user leaving
+        async_to_sync(self.channel_layer.group_send)(
+            self.room_group_name,
+            {
+                'type': 'user_leave',
+                'username': self.user.username,
+            }
+        )
 
     def receive(self, text_data):
         print("received")
@@ -61,7 +95,7 @@ class ChatConsumer(WebsocketConsumer):
         username = event['username']
         datatime = event['datatime']
         sender_id = event['sender_id']
-        
+
         current_user_id = self.scope['user'].id
         if sender_id != current_user_id:
             self.send(text_data=json.dumps({
@@ -71,5 +105,16 @@ class ChatConsumer(WebsocketConsumer):
                 'sender_id': sender_id
             }))
 
+    def user_join(self, event):
+        username = event['username']
+        self.send(text_data=json.dumps({
+            'type': 'user_join',
+            'username': username,
+        }))
 
-
+    def user_leave(self, event):
+        username = event['username']
+        self.send(text_data=json.dumps({
+            'type': 'user_leave',
+            'username': username,
+        }))

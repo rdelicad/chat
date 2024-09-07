@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from .models import Room
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
@@ -9,11 +9,12 @@ def home(request):
 
 @login_required
 def room(request, room_id):
-    try:
-        room = request.user.rooms_joined.get(id=room_id) # Check if user is in the room
+    room = get_object_or_404(Room, id=room_id)
 
-    except Room.DoesNotExist:
-        error_message = "No tiene permiso para entrar en esta sala" # If not, return 403 Forbidden, cambiar por pagina de error
+    # Check if the user is a member of the room
+    if request.user not in room.users.all():
+        error_message = "No tiene permiso para entrar en esta sala"
         return render(request, 'chat/home.html', {'error_message': error_message, 'rooms': Room.objects.all()})
-    
-    return render(request, 'chat/room.html', {'room': room})
+
+    users_in_room = room.users.all()
+    return render(request, 'chat/room.html', {'room': room, 'users_in_room': users_in_room})
