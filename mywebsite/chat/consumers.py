@@ -1,56 +1,63 @@
+from channels.generic.websocket import AsyncWebsocketConsumer
 import json
-from channels.generic.websocket import WebsocketConsumer
-from asgiref.sync import async_to_sync
 from django.utils import timezone
-from .models import Room
 
-class ChatConsumer(WebsocketConsumer):
+class ChatConsumer(AsyncWebsocketConsumer):
     connected_users = set()
 
-    def connect(self):
-        self.id = self.scope['url_route']['kwargs']['room_id']
-        self.room_group_name = f'sala_chat_{self.id}'
+    async def connect(self):
+        # Extraemos el room_id desde los argumentos de la URL correctamente
+        self.room_id = self.scope['url_route']['kwargs']['room_id']
+        self.room_group_name = f'sala_chat_{self.room_id}' 
         self.user = self.scope['user']
-        print("Conexion establecida al grupo: ", self.room_group_name)
-        print("Conexion establecida con el channel_name: ", self.channel_name)
 
-        # Add user to connected users set
+        if self.user.is_authenticated:
+            self.username = self.user.username
+        else:
+            self.username = 'Anonimo'
+            
+        print("Conexión establecida al grupo:", self.room_group_name)
+        print("Conexión establecida con el channel_name:", self.channel_name)
+
+        # Añadir el usuario a la lista de usuarios conectados
         self.connected_users.add(self.user.username)
 
-        async_to_sync(self.channel_layer.group_add)(
+        # Agregar al grupo
+        await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
-        self.accept()
+        await self.accept()
 
-        # Notify group about the new user
-        async_to_sync(self.channel_layer.group_send)(
+        # Notificar al grupo sobre el nuevo usuario
+        await self.channel_layer.group_send(
             self.room_group_name,
             {
                 'type': 'user_join',
-                'username': self.user.username,
+                'username': self.username,
             }
         )
 
-        # Send the list of currently connected users to the new user
-        self.send(text_data=json.dumps({
+        # Enviar la lista de usuarios conectados al nuevo usuario
+        await self.send(text_data=json.dumps({
             'type': 'connected_users',
             'users': list(self.connected_users),
         }))
 
-    def disconnect(self, close_code):
-        print("disconnected")
+    async def disconnect(self, close_code):
+        print("Desconectado")
 
-        # Remove user from connected users set
+        # Eliminar el usuario de la lista de usuarios conectados
         self.connected_users.discard(self.user.username)
 
-        async_to_sync(self.channel_layer.group_discard)(
+        # Eliminar del grupo
+        await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
 
-        # Notify group about the user leaving
-        async_to_sync(self.channel_layer.group_send)(
+        # Notificar al grupo sobre el usuario que salió
+        await self.channel_layer.group_send(
             self.room_group_name,
             {
                 'type': 'user_leave',
@@ -58,25 +65,26 @@ class ChatConsumer(WebsocketConsumer):
             }
         )
 
-    def receive(self, text_data):
-        print("received")
+    async def receive(self, text_data):
+        print("Recibido")
         try:
             text_data_json = json.loads(text_data)
             message = text_data_json['message']
 
-            # Obtenemos el ID del usuario que envia el mensaje
+            # Obtenemos el ID del usuario que envía el mensaje
             if self.user.is_authenticated:
-                sender_id = self.scope['user'].id
+                sender_id = self.user.id
             else:
-                None
+                sender_id = None
+
             if sender_id:
-                async_to_sync(self.channel_layer.group_send)(
+                await self.channel_layer.group_send(
                     self.room_group_name,
                     {
                         'type': 'chat_message',
                         'message': message,
-                        'username': self.user.username,
-                        'datatime': timezone.localtime(timezone.now()).strftime('%H:%M'),
+                        'username': self.username,
+                        'datetime': timezone.localtime(timezone.now()).strftime('%H:%M'),
                         'sender_id': sender_id
                     }
                 )
@@ -84,37 +92,38 @@ class ChatConsumer(WebsocketConsumer):
                 print("Usuario no autenticado. Ignorando mensaje")
 
         except json.JSONDecodeError as e:
-            print('Hubo un error al decodificar el mensaje: ', e)
+            print('Error al decodificar el mensaje:', e)
         except KeyError as e:
-            print('Hubo un error al acceder a una clave del diccionario: ', e)
+            print('Error al acceder a una clave del diccionario:', e)
         except Exception as e:
-            print('Hubo un error inesperado: ', e)
+            print('Error inesperado:', e)
 
-    def chat_message(self, event):
+    async def chat_message(self, event):
         message = event['message']
         username = event['username']
-        datatime = event['datatime']
+        datetime = event['datetime']
         sender_id = event['sender_id']
 
-        current_user_id = self.scope['user'].id
+        current_user_id = self.user.id
         if sender_id != current_user_id:
-            self.send(text_data=json.dumps({
+            await self.send(text_data=json.dumps({
                 'message': message,
                 'username': username,
-                'datatime': datatime,
+                'datetime': datetime,
                 'sender_id': sender_id
             }))
 
-    def user_join(self, event):
+    async def user_join(self, event):
         username = event['username']
-        self.send(text_data=json.dumps({
+        await self.send(text_data=json.dumps({
             'type': 'user_join',
             'username': username,
         }))
+        
 
-    def user_leave(self, event):
+    async def user_leave(self, event):
         username = event['username']
-        self.send(text_data=json.dumps({
+        await self.send(text_data=json.dumps({
             'type': 'user_leave',
             'username': username,
         }))
