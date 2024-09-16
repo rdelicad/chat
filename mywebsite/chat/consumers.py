@@ -77,7 +77,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             else:
                 sender_id = None
 
-            if sender_id:
+            if sender_id and message:
                 await self.channel_layer.group_send(
                     self.room_group_name,
                     {

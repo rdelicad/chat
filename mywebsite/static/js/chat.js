@@ -30,12 +30,23 @@ document.addEventListener("DOMContentLoaded", function () {
   
 	chatSocket.onmessage = function (e) {
 	  var data = JSON.parse(e.data);
+
 	  if (data.type === "user_join") {
 		addUser(data.username);
 	  } else if (data.type === "user_leave") {
 		removeUser(data.username);
+	  } else if (data.type === "chat_message") {
+		displayMessage(data.username, data.message, data.datetime);
 	  }
 	};
+
+	function displayMessage(username, message, datetime) {
+		var boxMessages = document.getElementById("boxMessages");
+		var messageElement = document.createElement("div");
+		messageElement.className = "message";
+		messageElement.innerHTML = `<strong>${username}</strong> <small>${datetime}</small>: ${message}`;
+		boxMessages.appendChild(messageElement);
+	  }
   
 	chatSocket.onclose = function (e) {
 	  console.error("Chat socket closed unexpectedly");
